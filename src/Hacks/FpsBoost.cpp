@@ -57,6 +57,20 @@ static bool _setup = ([] {
     boost.onChange = [prev] { prev(); if (scro::fps::boostFrames()) scro::find("safe").b = true; };
 }(), true);
 
+// Called by the Geode Loaded callback before scro::load(). The option objects above
+// are registered during static initialization; touching them here guarantees this
+// translation unit is linked and keeps the registration order explicit.
+void scro::fps::initOptions() {
+    (void)boost;
+    (void)target;
+    (void)boostFrames;
+#ifdef GEODE_IS_MOBILE
+    (void)zeroDelay;
+#endif
+    (void)precision;
+    (void)diagnostics;
+}
+
 bool scro::fps::boostFrames() { return boost.b && ::boostFrames.b; }
 static bool cbfActive() {
 #ifdef GEODE_IS_MOBILE
@@ -177,3 +191,4 @@ class $modify(ScroFpsQueue, GJBaseGameLayer) {
     }
 };
 #endif
+        
