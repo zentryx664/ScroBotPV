@@ -24,5 +24,6 @@ public:
     void onAction(CCObject*);
     void onHelp(CCObject*);
     void onPage(CCObject*);
+    void rebuild() { this->removeAllChildrenWithCleanup(true); setup(m_category, m_w, m_availH, false, m_onSel, m_section); }
 };
 }

@@ -33,6 +33,10 @@ class ScroMenu : public FLAlertLayer {
     bool m_closing = false;
     float m_layoutScale = 1.f;
 
+    CCNode* sideButton(int i, bool selected) {
+        return button(kCategories[i], SB - 28.f, metrics::sideH, selected, metrics::sideText);
+    }
+
     CCMenu* newMenu(CCNode* parent) {
         auto m = CCMenu::create();
         m->setPosition(0, 0);
@@ -47,11 +51,11 @@ class ScroMenu : public FLAlertLayer {
         pane->setContentSize({PW, bodyH});
 
         auto tabs = newMenu(pane);
-        float tabH = 18.f, gap = 2.f;
+        float tabH = metrics::tabH, gap = 2.f;
         float tabW = (PW - gap * (kGlobalTabCount - 1)) / kGlobalTabCount;
         float tabY = bodyH - tabH / 2;
         for (int i = 0; i < kGlobalTabCount; ++i) {
-            auto it = CCMenuItemSpriteExtra::create(button(kGlobalTabs[i], tabW, tabH, m_globalSub == i, 0.28f),
+            auto it = CCMenuItemSpriteExtra::create(button(kGlobalTabs[i], tabW, tabH, m_globalSub == i, metrics::tabText),
                 this, menu_selector(ScroMenu::onGlobalSub));
             it->m_scaleMultiplier = 1.f;
             it->setTag(i);
@@ -109,7 +113,7 @@ class ScroMenu : public FLAlertLayer {
         float sideTop = H - 58.f, sideBottom = 40.f;
         float sideStep = (sideTop - sideBottom) / std::max(1, kNumCategories - 1);
         for (int i = 0; i < kNumCategories; i++) {
-            auto it = CCMenuItemSpriteExtra::create(button(kCategories[i], SB - 28.f, 18.f, i == 0, 0.34f),
+            auto it = CCMenuItemSpriteExtra::create(sideButton(i, i == 0),
                 this, menu_selector(ScroMenu::onTab));
             it->m_scaleMultiplier = 1.f;
             it->setTag(i); it->setPosition(SB / 2 + 4.f, sideTop - i * sideStep);
@@ -128,10 +132,10 @@ class ScroMenu : public FLAlertLayer {
         m_desc = label("", 0.8f, theme::MUTED, {0.f, 0.5f}, {SB + 14, FOOT / 2});
         m_root->addChild(m_desc);
         auto fm = newMenu(m_root);
-        auto sv = CCMenuItemSpriteExtra::create(button("Save", 62, 26), this, menu_selector(ScroMenu::onSave));
-        sv->setPosition(W - 14 - 31, FOOT / 2 + 1);
-        auto rs = CCMenuItemSpriteExtra::create(button("Reset", 62, 26), this, menu_selector(ScroMenu::onReset));
-        rs->setPosition(W - 14 - 62 - 6 - 31, FOOT / 2 + 1);
+        auto sv = CCMenuItemSpriteExtra::create(button("Save", metrics::footW, metrics::footH), this, menu_selector(ScroMenu::onSave));
+        sv->setPosition(W - 14 - metrics::footW / 2, FOOT / 2 + 1);
+        auto rs = CCMenuItemSpriteExtra::create(button("Reset", metrics::footW, metrics::footH), this, menu_selector(ScroMenu::onReset));
+        rs->setPosition(W - 14 - metrics::footW - 6 - metrics::footW / 2, FOOT / 2 + 1);
         fm->addChild(sv); fm->addChild(rs);
 
         showTab(0, false);
@@ -147,19 +151,25 @@ class ScroMenu : public FLAlertLayer {
         std::string t = o ? (o->desc.empty() ? o->name : o->desc) : "Tap an option to see what it does.";
         m_desc->setString(t.c_str());
         // Reserve room for Reset/Save so help text never runs underneath the buttons.
-        float helpW = std::max(60.f, W - SB - 170.f);
+        float helpW = std::max(60.f, W - SB - (metrics::footW * 2.f + 52.f));
         fit(m_desc, helpW, 0.8f);
     }
 
     void showTab(int i, bool animate) {
         m_tab = i;
-        for (int k = 0; k < kNumCategories; k++) {
-            if (auto bs = typeinfo_cast<ButtonSprite*>(m_side[k]->getNormalImage()))
-                bs->updateBGImage(k == i ? "GJ_button_01.png" : "GJ_button_04.png");
-        }
+        // Rebuild each tab button (green = selected) instead of calling ButtonSprite::updateBGImage,
+        // which can reset a custom button size.
+        for (int k = 0; k < kNumCategories; k++) m_side[k]->setNormalImage(sideButton(k, k == i));
         m_title->setString(kCategories[i]);
         fit(m_title, W - SB - 40.f, 1.2f);
-        if (m_pane) m_pane->removeFromParent();
+        if (m_pane) {
+            // remove the old page next frame: the tab you just tapped may live inside it
+            auto old = m_pane;
+            old->setVisible(false);
+            old->runAction(CCSequence::create(CCDelayTime::create(0.f),
+                CCCallFunc::create(old, callfunc_selector(CCNode::removeFromParent)), nullptr));
+            m_pane = nullptr;
+        }
         std::string cat = kCategories[i];
         if (cat == "Global") {
             buildGlobalPane(animate);
