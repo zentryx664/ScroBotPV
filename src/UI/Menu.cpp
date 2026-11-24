@@ -47,12 +47,13 @@ class ScroMenu : public FLAlertLayer {
         pane->setContentSize({PW, bodyH});
 
         auto tabs = newMenu(pane);
-        float tabH = 22.f, gap = 3.f;
+        float tabH = 18.f, gap = 2.f;
         float tabW = (PW - gap * (kGlobalTabCount - 1)) / kGlobalTabCount;
         float tabY = bodyH - tabH / 2;
         for (int i = 0; i < kGlobalTabCount; ++i) {
-            auto it = CCMenuItemSpriteExtra::create(button(kGlobalTabs[i], tabW, tabH, m_globalSub == i, 0.30f),
+            auto it = CCMenuItemSpriteExtra::create(button(kGlobalTabs[i], tabW, tabH, m_globalSub == i, 0.28f),
                 this, menu_selector(ScroMenu::onGlobalSub));
+            it->m_scaleMultiplier = 1.f;
             it->setTag(i);
             it->setPosition(tabW / 2 + i * (tabW + gap), tabY);
             tabs->addChild(it);
@@ -81,7 +82,7 @@ class ScroMenu : public FLAlertLayer {
         }
     }
 
-    bool init() {
+    bool init() override {
         if (!FLAlertLayer::init(120)) return false;
         m_noElasticity = true;
         m_mainLayer = CCLayer::create();
@@ -108,9 +109,10 @@ class ScroMenu : public FLAlertLayer {
         float sideTop = H - 58.f, sideBottom = 40.f;
         float sideStep = (sideTop - sideBottom) / std::max(1, kNumCategories - 1);
         for (int i = 0; i < kNumCategories; i++) {
-            auto it = CCMenuItemSpriteExtra::create(button(kCategories[i], SB - 28.f, 22.f, i == 0, 0.40f),
+            auto it = CCMenuItemSpriteExtra::create(button(kCategories[i], SB - 28.f, 18.f, i == 0, 0.34f),
                 this, menu_selector(ScroMenu::onTab));
-            it->m_scaleMultiplier = 1.f; it->setTag(i); it->setPosition(SB / 2 + 4.f, sideTop - i * sideStep);
+            it->m_scaleMultiplier = 1.f;
+            it->setTag(i); it->setPosition(SB / 2 + 4.f, sideTop - i * sideStep);
             sm->addChild(it);
             m_side.push_back(it);
         }
