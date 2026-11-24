@@ -1,0 +1,60 @@
+name: Build ScroBot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "**"
+
+# a new push cancels the older run of the same branch
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: Windows
+            os: windows-latest
+            target: Win64
+          - name: Android32
+            os: ubuntu-latest
+            target: Android32
+          - name: Android64
+            os: ubuntu-latest
+            target: Android64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Geode mod
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: given            # uses the Geode version written in mod.json (5.11.2)
+          combine: true
+          target: ${{ matrix.config.target }}
+
+  package:
+    name: Package ScroBot
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Combine platform builds
+        id: build
+        uses: geode-sdk/build-geode-mod/combine@main
+
+      - name: Upload final build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScroBot-multiplatform
+          path: ${{ steps.build.outputs.build-output }}
+          if-no-files-found: error
+          
