@@ -22,11 +22,18 @@ void fit(CCLabelBMFont* l, float maxWidth, float scale) {
     l->limitLabelWidth(maxWidth, scale * fs, 0.25f * fs);
 }
 
+// A node that is already fading in is skipped. Fading it twice made the second pass read opacity 0 as the
+// "original" value, so buttons and labels stayed invisible after switching tabs.
+static constexpr int kFadeTag = 0x5C0F;
+
 template <class T> static bool fadeAs(CCNode* n, float delay) {
     if (auto p = typeinfo_cast<T*>(n)) {
+        if (n->getActionByTag(kFadeTag)) return true;
         GLubyte o = p->getOpacity();
         p->setOpacity(0);
-        n->runAction(CCSequence::create(CCDelayTime::create(delay), CCFadeTo::create(0.12f, o), nullptr));
+        auto seq = CCSequence::create(CCDelayTime::create(delay), CCFadeTo::create(0.12f, o), nullptr);
+        seq->setTag(kFadeTag);
+        n->runAction(seq);
         return true;
     }
     return false;
