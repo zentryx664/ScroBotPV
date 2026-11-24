@@ -1,5 +1,6 @@
 #include "Hacks/FrameStep.hpp"
 #include "Labels/Labels.hpp"
+#include "UI/Theme.hpp"
 #include "Utils/Draw.hpp"
 #include "Utils/Settings.hpp"
 #include <Geode/modify/PlayLayer.hpp>
@@ -23,9 +24,9 @@ class $modify(ScroStepLayer, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
         auto win = CCDirector::get()->getWinSize();
-        auto b = CCMenuItemSpriteExtra::create(scro::draw::button(">", 28, 28), this, menu_selector(ScroStepLayer::onStep));
+        auto b = CCMenuItemSpriteExtra::create(scro::draw::button(">", scro::metrics::hudBtn, scro::metrics::hudBtn), this, menu_selector(ScroStepLayer::onStep));
         b->setID("scrobot-step");
-        b->setPosition(win.width - 24.f, 58.f);
+        b->setPosition(win.width - scro::metrics::hudBtn / 2.f - 10.f, scro::metrics::hudBtn * 1.5f + 16.f);
         b->setVisible(fstep.b);
         scro::labels::menu(this)->addChild(b);
     }

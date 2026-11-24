@@ -21,7 +21,9 @@ struct FpsOptions {
 #ifdef GEODE_IS_MOBILE
     scro::Option& zeroDelay;
 #endif
+#ifndef GEODE_IS_WINDOWS
     scro::Option& precision;
+#endif
     scro::Option& diagnostics;
 
     FpsOptions()
@@ -30,18 +32,14 @@ struct FpsOptions {
         target(scro::step("FPS Boost", "fpstarget120", "Target FPS",
           "Frame rate to force. The minimum is 120.", 0.f, 0.f, 7.f, 1.f, "", 20)),
         boostFrames(scro::toggle("FPS Boost", "boostframes", "Boost Frames",
-          "Click between frames: your taps register at their exact moment between physics steps, which makes cube jumps and wave turns easier. Also lightens effects. Forces Safe Mode on until turned off.", false, 25)),
+          "Click between frames: your taps register at their exact moment between physics steps, which makes cube jumps and wave turns easier. Also lightens effects. Completions are sent as test runs while it is on.", false, 25)),
 #ifdef GEODE_IS_MOBILE
         zeroDelay(scro::toggle("FPS Boost", "zdcbf", "Zero-Delay CBF",
           "Mobile only. Uses Geometry Dash's native click-between-steps behavior.", false, 28)),
 #endif
+#ifndef GEODE_IS_WINDOWS
         precision(scro::toggle("FPS Boost", "clickprec", "Click Precision",
-#if defined(GEODE_IS_WINDOWS)
-          "Not available on Windows.", false, 30)),
-#elif defined(GEODE_IS_MOBILE)
-          "Disabled on Android to preserve Geometry Dash's native touch input.", false, 30)),
-#else
-          "Applies every click at the exact moment you pressed it, even on laggy frames.", true, 30)),
+          "Applies every click at the exact moment you pressed it, even on laggy frames. Needs FPS Boost on.", false, 30)),
 #endif
         diagnostics(scro::toggle("FPS Boost", "fpsdiag", "Frame-Time Diagnostics",
           "Show smoothed frame time and recent frame-time peak in the in-level HUD.", false, 40)) {
@@ -50,24 +48,14 @@ struct FpsOptions {
 #ifdef GEODE_IS_MOBILE
         zeroDelay.section = "Input";
 #endif
+#ifndef GEODE_IS_WINDOWS
         precision.section = "Input";
-#ifdef GEODE_IS_MOBILE
-        // Click Precision is intentionally unavailable on Android. Older saved values
-        // are reset so no prior configuration can intercept native touch input.
-        precision.locked = [] { return true; };
-        precision.b = false;
 #endif
         diagnostics.section = "Diagnostics";
 
+        // Safe Mode is no longer locked by Boost Frames. Completions are still sent as test runs while it is
+        // active (see SafeMode.cpp), so nothing is ever submitted.
         boost.onChange = target.onChange = [] { scro::fps::apply(); };
-        boostFrames.onChange = [] {
-            if (scro::fps::boostFrames()) scro::find("safe").b = true;
-        };
-        auto previousBoostChange = boost.onChange;
-        boost.onChange = [previousBoostChange] {
-            previousBoostChange();
-            if (scro::fps::boostFrames()) scro::find("safe").b = true;
-        };
     }
 };
 
@@ -159,7 +147,7 @@ bool scro::fps::boostFrames() {
     return o.boost.b && o.boostFrames.b;
 }
 
-static bool cbfActive() {
+[[maybe_unused]] static bool cbfActive() {
     auto& o = options();
 #ifdef GEODE_IS_MOBILE
     if (o.zeroDelay.b) return true;
@@ -200,10 +188,6 @@ class $modify(ScroFpsMenu, MenuLayer) {
         if (!MenuLayer::init()) return false;
         auto& o = options();
         if (o.boost.b) scro::fps::apply();
-#ifdef GEODE_IS_MOBILE
-        o.precision.b = false;
-#endif
-        if (scro::fps::boostFrames()) scro::find("safe").b = true;
         return true;
     }
 };
@@ -232,8 +216,8 @@ std::vector<Raw>& rawClicks() {
 }
 } // namespace
 
-#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MOBILE)
-bool scro::fps::precise() { return false; }
+#ifdef GEODE_IS_WINDOWS
+bool scro::fps::precise() { return false; }   // no input queue to hold on Windows; the option is not shown there
 #else
 bool scro::fps::precise() {
     auto& o = options();

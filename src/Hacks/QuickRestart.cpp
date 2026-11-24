@@ -1,4 +1,5 @@
 #include "Labels/Labels.hpp"
+#include "UI/Theme.hpp"
 #include "Utils/Draw.hpp"
 #include "Utils/Settings.hpp"
 #include <Geode/modify/PlayLayer.hpp>
@@ -14,9 +15,9 @@ class $modify(ScroRestartLayer, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
         auto win = CCDirector::get()->getWinSize();
-        auto b = CCMenuItemSpriteExtra::create(scro::draw::button("R", 28, 28), this, menu_selector(ScroRestartLayer::onQuickRestart));
+        auto b = CCMenuItemSpriteExtra::create(scro::draw::button("R", scro::metrics::hudBtn, scro::metrics::hudBtn), this, menu_selector(ScroRestartLayer::onQuickRestart));
         b->setID("scrobot-restart");
-        b->setPosition(win.width - 24.f, 24.f);
+        b->setPosition(win.width - scro::metrics::hudBtn / 2.f - 10.f, scro::metrics::hudBtn / 2.f + 10.f);
         b->setVisible(qr.b);
         scro::labels::menu(this)->addChild(b);
     }

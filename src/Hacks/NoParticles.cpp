@@ -6,9 +6,15 @@ using namespace geode::prelude;
 static auto& nop = scro::toggle("Visuals", "noparticles", "No Particles", "Hide particle effects.", false, 40);
 
 class $modify(ScroNoParticles, CCParticleSystem) {
+    struct Fields { bool hiddenByUs = false; };
+
     void update(float dt) {
-        if ((nop.b || scro::fps::boostFrames()) && PlayLayer::get()) this->setVisible(false);
-        else if (!this->isVisible() && PlayLayer::get()) this->setVisible(true);
+        if (PlayLayer::get()) {
+            bool want = nop.b || scro::fps::boostFrames();
+            // only undo what this mod hid, so particles the game keeps hidden itself stay hidden
+            if (want && this->isVisible()) { this->setVisible(false); m_fields->hiddenByUs = true; }
+            else if (!want && m_fields->hiddenByUs) { this->setVisible(true); m_fields->hiddenByUs = false; }
+        }
         CCParticleSystem::update(dt);
     }
 };
