@@ -1,2 +1,7 @@
 #include "Utils/Settings.hpp"
-$on_mod(Loaded) { scro::load(); }
+#include "Hacks/FpsBoost.hpp"
+
+$on_mod(Loaded) {
+    scro::fps::initOptions();
+    scro::load();
+}
