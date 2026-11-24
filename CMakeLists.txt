@@ -7,7 +7,7 @@ elseif (APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-project(ScroBot VERSION 1.4.0)
+project(ScroBot VERSION 1.5.0)
 
 # Every .cpp under src/ is built automatically: add a feature = add a file.
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)

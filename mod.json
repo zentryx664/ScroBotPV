@@ -3,9 +3,9 @@
   "gd": { "win": "2.2081", "android": "2.2081" },
   "id": "zentryx.scrobot",
   "name": "ScroBot",
-  "version": "v1.4.0",
+  "version": "v1.5.0",
   "developer": "Zentryx",
-  "description": "Macro bot and a pack of toggleable mods. Tab on PC, Scro button in the pause menu on mobile.",
+  "description": "Macro bot plus 30+ options: Jump Hack, No Clip, Speedhack, Hitboxes, Low Detail Mode 2, FPS Boost, labels and more. Press Tab on PC, or tap Scro in the pause menu.",
   "tags": ["utility", "cheat"],
   "settings": {
     "open-menu": {
