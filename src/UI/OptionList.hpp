@@ -2,6 +2,8 @@
 #include "Utils/Settings.hpp"
 #include <Geode/Geode.hpp>
 #include <functional>
+#include <string>
+#include <vector>
 using namespace geode::prelude;
 
 namespace scro {
@@ -9,6 +11,7 @@ namespace scro {
 class OptionList : public CCNode {
     float m_w = 0, m_h = 0, m_availH = 0;
     int m_page = 0, m_pageCount = 1;
+    std::string m_category, m_section;
     std::vector<Option*> m_opts;
     std::vector<CCLabelBMFont*> m_vals;
     std::function<void(Option*)> m_onSel;
