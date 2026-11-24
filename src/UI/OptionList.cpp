@@ -2,7 +2,7 @@
 #include "UI/Theme.hpp"
 #include "Utils/Draw.hpp"
 #include <algorithm>
-#include <fmt/format.h>
+#include <utility>
 using namespace scro;
 using namespace scro::draw;
 
@@ -45,136 +45,240 @@ OptionList* OptionList::create(std::string const& cat, float w, float availH, bo
     return nullptr;
 }
 
-bool OptionList::setup(std::string const& cat, float w, float availH, bool animate, std::function<void(Option*)> onSel, std::string const& section) {
-    m_w = w; m_availH = availH; m_onSel = std::move(onSel); m_category = cat; m_section = section;
+bool OptionList::setup(std::string const& cat, float w, float availH, bool animate,
+                       std::function<void(Option*)> onSel, std::string const& section) {
+    m_w = w;
+    m_availH = availH;
+    m_onSel = std::move(onSel);
+    m_category = cat;
+    m_section = section;
+
     m_opts = inCategory(cat);
     if (!section.empty()) {
-        std::erase_if(m_opts, [&](Option* o) { return o->section != section; });
+        std::erase_if(m_opts, [&](Option* option) { return option->section != section; });
     }
 
-    // Keep every option inside the visible panel. The previous layout placed the full,
-    // unbounded list above the panel with no clipping/scroll view, making it look empty.
+    // Paginate by the real height of each row, including section headers. This avoids
+    // placing options above the visible panel on mobile and desktop alike.
     constexpr float rowH = 19.f;
     constexpr float sectionH = 12.f;
     constexpr float navH = 18.f;
-    int rowsPerPage = std::max(1, static_cast<int>((availH - navH - 4.f) / rowH));
-    m_pageCount = std::max(1, static_cast<int>((m_opts.size() + rowsPerPage - 1) / rowsPerPage));
+    constexpr float topBottomPadding = 8.f;
+    const float contentH = std::max(rowH + sectionH, availH - navH - topBottomPadding);
+
+    std::vector<std::pair<size_t, size_t>> pages;
+    if (m_opts.empty()) {
+        pages.emplace_back(0, 0);
+    } else {
+        size_t pageStart = 0;
+        while (pageStart < m_opts.size()) {
+            size_t pageEnd = pageStart;
+            float usedH = 0.f;
+            std::string previousSection;
+
+            while (pageEnd < m_opts.size()) {
+                auto const* option = m_opts[pageEnd];
+                const bool needsHeading = section.empty() && option->section != previousSection;
+                const float itemH = rowH + (needsHeading ? sectionH : 0.f);
+
+                if (pageEnd > pageStart && usedH + itemH > contentH) break;
+                usedH += itemH;
+                previousSection = option->section;
+                ++pageEnd;
+            }
+
+            // Always make forward progress, even if the panel is unusually short.
+            if (pageEnd == pageStart) ++pageEnd;
+            pages.emplace_back(pageStart, pageEnd);
+            pageStart = pageEnd;
+        }
+    }
+
+    m_pageCount = static_cast<int>(pages.size());
     m_page = std::clamp(m_page, 0, m_pageCount - 1);
-    size_t first = static_cast<size_t>(m_page * rowsPerPage);
-    size_t last = std::min(m_opts.size(), first + static_cast<size_t>(rowsPerPage));
+    const size_t first = pages[static_cast<size_t>(m_page)].first;
+    const size_t last = pages[static_cast<size_t>(m_page)].second;
 
     m_h = availH;
     this->setContentSize({w, m_h});
     m_vals.assign(m_opts.size(), nullptr);
+
+    if (m_opts.empty()) {
+        this->addChild(label("No options in this section", 0.72f, theme::MUTED,
+            {0.5f, 0.5f}, {w / 2.f, availH / 2.f}));
+        return true;
+    }
 
     auto menu = CCMenu::create();
     menu->setPosition(0, 0);
     menu->setTouchPriority(-510);
     this->addChild(menu);
 
-    auto ac = theme::accent();
-    float y = availH - (m_pageCount > 1 ? navH : 4.f);
-    constexpr float bs = 17.f, vw = 48.f, gap = 3.f, btnW = 48.f;
+    const auto accent = theme::accent();
+    float y = availH - (m_pageCount > 1 ? navH + 4.f : 4.f);
+    constexpr float buttonSize = 17.f;
+    constexpr float valueW = 48.f;
+    constexpr float gap = 3.f;
+    constexpr float actionW = 48.f;
     std::string lastSection;
+
     for (size_t i = first; i < last; ++i) {
-        auto o = m_opts[i];
-        int idx = static_cast<int>(i);
-        if (section.empty() && o->section != lastSection) {
-            lastSection = o->section;
+        auto* option = m_opts[i];
+        const int index = static_cast<int>(i);
+
+        if (section.empty() && option->section != lastSection) {
+            lastSection = option->section;
             y -= sectionH;
-            this->addChild(label(o->section, 0.68f, ac, {0.f, 0.5f}, {2.f, y + sectionH / 2}));
-            auto ln = rect(w, 1, ccc4(0, 0, 0, 90)); ln->setPosition(0, y + 1); this->addChild(ln);
+            this->addChild(label(option->section, 0.68f, accent,
+                {0.f, 0.5f}, {2.f, y + sectionH / 2.f}));
+            auto line = rect(w, 1.f, ccc4(0, 0, 0, 90));
+            line->setPosition(0.f, y + 1.f);
+            this->addChild(line);
         }
+
         y -= rowH;
-        float cy = y + rowH / 2;
+        const float centerY = y + rowH / 2.f;
 
-        if (o->kind == Kind::Toggle) {
-            auto t = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(OptionList::onToggle), 0.55f);
-            t->toggle(o->b);
-            t->setTag(idx);
-            t->setPosition(13.f, cy);
-            bool lk = o->locked && o->locked();
-            if (lk) t->setEnabled(false);
-            menu->addChild(t);
-            float nw = 0;
-            auto name = nameNode(o->name, w - 34.f - (lk ? 48.f : 0.f), nw);
+        if (option->kind == Kind::Toggle) {
+            auto toggle = CCMenuItemToggler::createWithStandardSprites(
+                this, menu_selector(OptionList::onToggle), 0.55f);
+            toggle->toggle(option->b);
+            toggle->setTag(index);
+            toggle->setPosition(13.f, centerY);
+            const bool locked = option->locked && option->locked();
+            if (locked) toggle->setEnabled(false);
+            menu->addChild(toggle);
+
+            float nameW = 0.f;
+            auto name = nameNode(option->name, w - 34.f - (locked ? 48.f : 0.f), nameW);
             auto help = CCMenuItemSpriteExtra::create(name, this, menu_selector(OptionList::onHelp));
-            help->m_scaleMultiplier = 1.f; help->setTag(idx);
-            help->setPosition(29.f + nw / 2, cy);
-            menu->addChild(help);
-            if (lk) this->addChild(label("LOCKED", 0.58f, ccColor3B{255, 120, 120}, {1.f, 0.5f}, {w - 4.f, cy}));
-        } else if (o->kind == Kind::Step) {
-            float nw = 0;
-            auto name = nameNode(o->name, w - (bs * 2 + vw + gap * 2) - 12.f, nw);
-            auto help = CCMenuItemSpriteExtra::create(name, this, menu_selector(OptionList::onHelp));
-            help->m_scaleMultiplier = 1.f; help->setTag(idx);
-            help->setPosition(4.f + nw / 2, cy);
+            help->m_scaleMultiplier = 1.f;
+            help->setTag(index);
+            help->setPosition(29.f + nameW / 2.f, centerY);
             menu->addChild(help);
 
-            auto mi = CCMenuItemSpriteExtra::create(arrow(false, bs), this, menu_selector(OptionList::onStep));
-            mi->setTag(idx * 2); mi->setPosition(w - bs * 1.5f - gap - vw - gap, cy);
-            auto pi = CCMenuItemSpriteExtra::create(arrow(true, bs), this, menu_selector(OptionList::onStep));
-            pi->setTag(idx * 2 + 1); pi->setPosition(w - bs / 2, cy);
-            menu->addChild(mi); menu->addChild(pi);
-            auto v = label(o->text(), 0.78f, ac, {0.5f, 0.5f}, {w - bs - gap - vw / 2, cy});
-            fit(v, vw - 4.f, 0.78f);
-            this->addChild(v);
-            m_vals[i] = v;
+            if (locked) {
+                this->addChild(label("LOCKED", 0.58f, ccColor3B{255, 120, 120},
+                    {1.f, 0.5f}, {w - 4.f, centerY}));
+            }
+        } else if (option->kind == Kind::Step) {
+            float nameW = 0.f;
+            auto name = nameNode(option->name,
+                w - (buttonSize * 2.f + valueW + gap * 2.f) - 12.f, nameW);
+            auto help = CCMenuItemSpriteExtra::create(name, this, menu_selector(OptionList::onHelp));
+            help->m_scaleMultiplier = 1.f;
+            help->setTag(index);
+            help->setPosition(4.f + nameW / 2.f, centerY);
+            menu->addChild(help);
+
+            auto minus = CCMenuItemSpriteExtra::create(arrow(false, buttonSize), this,
+                menu_selector(OptionList::onStep));
+            minus->setTag(index * 2);
+            minus->setPosition(w - buttonSize * 1.5f - gap - valueW - gap, centerY);
+            auto plus = CCMenuItemSpriteExtra::create(arrow(true, buttonSize), this,
+                menu_selector(OptionList::onStep));
+            plus->setTag(index * 2 + 1);
+            plus->setPosition(w - buttonSize / 2.f, centerY);
+            menu->addChild(minus);
+            menu->addChild(plus);
+
+            auto value = label(option->text(), 0.78f, accent, {0.5f, 0.5f},
+                {w - buttonSize - gap - valueW / 2.f, centerY});
+            fit(value, valueW - 4.f, 0.78f);
+            this->addChild(value);
+            m_vals[i] = value;
         } else {
-            float nw = 0;
-            auto name = nameNode(o->name, w - btnW - 12.f, nw);
+            float nameW = 0.f;
+            auto name = nameNode(option->name, w - actionW - 12.f, nameW);
             auto help = CCMenuItemSpriteExtra::create(name, this, menu_selector(OptionList::onHelp));
-            help->m_scaleMultiplier = 1.f; help->setTag(idx);
-            help->setPosition(4.f + nw / 2, cy);
+            help->m_scaleMultiplier = 1.f;
+            help->setTag(index);
+            help->setPosition(4.f + nameW / 2.f, centerY);
             menu->addChild(help);
-            auto it = CCMenuItemSpriteExtra::create(button("Open", btnW, 18.f, false, 0.65f), this, menu_selector(OptionList::onAction));
-            it->m_scaleMultiplier = 1.f;
-            it->setTag(idx); it->setPosition(w - btnW / 2, cy);
-            menu->addChild(it);
+
+            auto open = CCMenuItemSpriteExtra::create(button("Open", actionW, 18.f, false, 0.65f),
+                this, menu_selector(OptionList::onAction));
+            open->m_scaleMultiplier = 1.f;
+            open->setTag(index);
+            open->setPosition(w - actionW / 2.f, centerY);
+            menu->addChild(open);
         }
     }
 
     if (m_pageCount > 1) {
-        auto prev = CCMenuItemSpriteExtra::create(button("<", 20.f, 15.f, false, 0.65f), this, menu_selector(OptionList::onPage));
-        prev->setTag(-1); prev->setPosition(w - 46.f, 8.f); prev->setEnabled(m_page > 0); menu->addChild(prev);
-        auto next = CCMenuItemSpriteExtra::create(button(">", 20.f, 15.f, false, 0.65f), this, menu_selector(OptionList::onPage));
-        next->setTag(1); next->setPosition(w - 14.f, 8.f); next->setEnabled(m_page + 1 < m_pageCount); menu->addChild(next);
-        this->addChild(label(fmt::format("{}/{}", m_page + 1, m_pageCount), 0.52f, theme::MUTED,
+        auto previous = CCMenuItemSpriteExtra::create(
+            button("<", 20.f, 15.f, false, 0.65f), this, menu_selector(OptionList::onPage));
+        previous->m_scaleMultiplier = 1.f;
+        previous->setTag(-1);
+        previous->setPosition(w - 46.f, 8.f);
+        previous->setEnabled(m_page > 0);
+        menu->addChild(previous);
+
+        auto next = CCMenuItemSpriteExtra::create(
+            button(">", 20.f, 15.f, false, 0.65f), this, menu_selector(OptionList::onPage));
+        next->m_scaleMultiplier = 1.f;
+        next->setTag(1);
+        next->setPosition(w - 14.f, 8.f);
+        next->setEnabled(m_page + 1 < m_pageCount);
+        menu->addChild(next);
+
+        const std::string pageText = std::to_string(m_page + 1) + "/" + std::to_string(m_pageCount);
+        this->addChild(label(pageText, 0.52f, theme::MUTED,
             {1.f, 0.5f}, {w - 58.f, 8.f}));
     }
+
     if (animate) fadeTree(this, 0.f);
     return true;
 }
 
-void OptionList::onToggle(CCObject* s) {
-    auto o = m_opts[static_cast<CCNode*>(s)->getTag()];
-    if (o->locked && o->locked()) return;
-    o->b = !o->b;                      // our value is the source of truth; the checkbox flips itself once per tap
+void OptionList::onToggle(CCObject* sender) {
+    const int index = static_cast<CCNode*>(sender)->getTag();
+    if (index < 0 || static_cast<size_t>(index) >= m_opts.size()) return;
+    auto* option = m_opts[static_cast<size_t>(index)];
+    if (option->locked && option->locked()) return;
+    option->b = !option->b;
     changed();
-    if (o->onChange) o->onChange();
-    if (m_onSel) m_onSel(o);
-}
-void OptionList::onStep(CCObject* s) {
-    int tag = static_cast<CCNode*>(s)->getTag(), i = tag / 2;
-    auto o = m_opts[i];
-    float v = std::clamp(o->f + ((tag & 1) ? o->st : -o->st), o->mn, o->mx);
-    o->f = std::round(v / o->st) * o->st;
-    if (auto l = m_vals[i]) { l->setString(o->text().c_str()); fit(l, 56.f, 0.9f); }
-    changed();
-    if (o->onChange) o->onChange();
-    if (m_onSel) m_onSel(o);
-}
-void OptionList::onAction(CCObject* s) {
-    auto o = m_opts[static_cast<CCNode*>(s)->getTag()];
-    if (o->action) o->action();
-    if (m_onSel) m_onSel(o);
-}
-void OptionList::onHelp(CCObject* s) {
-    if (m_onSel) m_onSel(m_opts[static_cast<CCNode*>(s)->getTag()]);
+    if (option->onChange) option->onChange();
+    if (m_onSel) m_onSel(option);
 }
 
-void OptionList::onPage(CCObject* s) {
-    m_page = std::clamp(m_page + static_cast<CCNode*>(s)->getTag(), 0, m_pageCount - 1);
-    this->removeAllChildren();
+void OptionList::onStep(CCObject* sender) {
+    const int tag = static_cast<CCNode*>(sender)->getTag();
+    const int index = tag / 2;
+    if (index < 0 || static_cast<size_t>(index) >= m_opts.size()) return;
+    auto* option = m_opts[static_cast<size_t>(index)];
+    const float value = std::clamp(option->f + ((tag & 1) ? option->st : -option->st),
+        option->mn, option->mx);
+    option->f = std::round(value / option->st) * option->st;
+    if (auto* valueLabel = m_vals[static_cast<size_t>(index)]) {
+        valueLabel->setString(option->text().c_str());
+        fit(valueLabel, 44.f, 0.78f);
+    }
+    changed();
+    if (option->onChange) option->onChange();
+    if (m_onSel) m_onSel(option);
+}
+
+void OptionList::onAction(CCObject* sender) {
+    const int index = static_cast<CCNode*>(sender)->getTag();
+    if (index < 0 || static_cast<size_t>(index) >= m_opts.size()) return;
+    auto* option = m_opts[static_cast<size_t>(index)];
+    if (option->action) option->action();
+    if (m_onSel) m_onSel(option);
+}
+
+void OptionList::onHelp(CCObject* sender) {
+    const int index = static_cast<CCNode*>(sender)->getTag();
+    if (index < 0 || static_cast<size_t>(index) >= m_opts.size()) return;
+    if (m_onSel) m_onSel(m_opts[static_cast<size_t>(index)]);
+}
+
+void OptionList::onPage(CCObject* sender) {
+    if (m_pageCount <= 1) return;
+    const int delta = static_cast<CCNode*>(sender)->getTag();
+    const int nextPage = std::clamp(m_page + delta, 0, m_pageCount - 1);
+    if (nextPage == m_page) return;
+    m_page = nextPage;
+    this->removeAllChildrenWithCleanup(true);
     setup(m_category, m_w, m_availH, false, m_onSel, m_section);
 }
