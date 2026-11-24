@@ -7,7 +7,8 @@ using namespace geode::prelude;
 namespace scro {
 // All options of one category as rows, grouped under section headings.
 class OptionList : public CCNode {
-    float m_w = 0, m_h = 0;
+    float m_w = 0, m_h = 0, m_availH = 0;
+    int m_page = 0, m_pageCount = 1;
     std::vector<Option*> m_opts;
     std::vector<CCLabelBMFont*> m_vals;
     std::function<void(Option*)> m_onSel;
@@ -19,5 +20,6 @@ public:
     void onStep(CCObject*);
     void onAction(CCObject*);
     void onHelp(CCObject*);
+    void onPage(CCObject*);
 };
 }
