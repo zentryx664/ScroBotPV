@@ -23,8 +23,10 @@ static scro::Option& zeroDelay = scro::toggle("FPS Boost", "zdcbf", "Zero-Delay 
     "Mobile only. Taps are timed inside the physics step with no extra buffering and no background work.", false, 28);
 #endif
 static scro::Option& precision = scro::toggle("FPS Boost", "clickprec", "Click Precision",
-#ifdef GEODE_IS_WINDOWS
+#if defined(GEODE_IS_WINDOWS)
     "Not available on Windows.", false, 30);
+#elif defined(GEODE_IS_MOBILE)
+    "Disabled on Android to preserve Geometry Dash's native touch input.", false, 30);
 #else
     "Applies every click at the exact moment you pressed it, even on laggy frames, so timing stays perfect.", true, 30);
 #endif
@@ -39,6 +41,12 @@ static bool _setup = ([] {
     zeroDelay.section = "Input";
 #endif
     precision.section = "Input";
+#ifdef GEODE_IS_MOBILE
+    // Older saved configs may have this enabled. The queue hook is intentionally disabled
+    // on Android, so keep the UI honest and prevent enabling a no-op setting.
+    precision.locked = [] { return true; };
+    precision.b = false;
+#endif
     diagnostics.section = "Diagnostics";
     boost.onChange = target.onChange = [] { scro::fps::apply(); };
     boostFrames.onChange = [] {
@@ -69,13 +77,19 @@ void scro::fps::apply() {
     float fps = boost.b ? std::max(120.f, kPresets[preset]) : g_origFps;   // hard floor: 120
     gm->setGameVariable("0116", boost.b ? true : g_origVar);
     gm->m_customFPSTarget = fps;
-    CCApplication::sharedApplication()->setAnimationInterval(1.0 / fps);
+    if (auto app = CCApplication::sharedApplication()) {
+        app->setAnimationInterval(1.0 / static_cast<double>(fps));
+    }
 }
 
 class $modify(ScroFpsMenu, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
         if (boost.b) scro::fps::apply();       // restore the saved setting on startup
+#ifdef GEODE_IS_MOBILE
+        // Clear values persisted by older builds; native mobile touch events must pass through.
+        precision.b = false;
+#endif
         if (scro::fps::boostFrames()) scro::find("safe").b = true;
         return true;
     }
@@ -127,15 +141,10 @@ Clock::time_point g_last = Clock::now();
 }
 // queueButton is an inline function on Windows (no address in the bindings), so it cannot be
 // hooked there. Click Precision is therefore only active on platforms where the hook exists.
-#ifdef GEODE_IS_WINDOWS
+#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MOBILE)
 bool scro::fps::precise() { return false; }
 #else
-bool scro::fps::precise() {
-    // Android touch input must stay on Geometry Dash's native queue. Intercepting
-    // queueButton here can strand a press/release between update callbacks on some
-    // devices, which makes the cube appear to ignore taps.
-    return false;
-}
+bool scro::fps::precise() { return boost.b && precision.b && !cbfActive(); }
 #endif
 bool scro::fps::pending() { return !g_held.empty(); }
 void scro::fps::hold(int b, bool d, bool p) {
