@@ -4,7 +4,7 @@ namespace scro::fps {
 struct Held { int button; bool down; bool p1; float frac; };   // frac = how far into the frame it happened (0..1)
 inline bool g_bypass = false;     // true while we release a held input ourselves
 
-void initOptions();             // register options after Geode reports the mod as Loaded
+void initOptions();               // ensure FPS options are registered before scro::load()
 bool precise();                   // FPS Boost + Click Precision are on
 bool pending();                   // inputs are being held
 void hold(int button, bool down, bool p1);
